@@ -7,7 +7,7 @@
   "regions": ["iad1"],
   "functions": {
     "src/pages/**/*.jsx": {
-      "runtime": "@vercel/node"
+      "runtime": "@vercel/node@1.10.0"
     }
   },
   "rewrites": [
