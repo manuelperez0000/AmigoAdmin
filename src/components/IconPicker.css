@@ -1,0 +1,18 @@
+.icon-picker-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.icon-wrapper {
+  font-size: 2rem;
+  cursor: pointer;
+  padding: 5px;
+  border-radius: 5px;
+  transition: background-color 0.2s;
+}
+
+.icon-wrapper:hover {
+  background-color: #f0f0f0;
+}
