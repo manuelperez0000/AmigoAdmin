@@ -51,7 +51,7 @@ const Navbar = () => {
       </div>
 
       <div className="navbar-right">
-        <div className={`dolar-input-container ${isDollarInputFocused ? 'focused' : 'focused'}`}>
+        <div>
           <label className="dolar-label">
             💰 Tasa del dólar:
           </label>
