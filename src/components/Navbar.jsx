@@ -47,6 +47,12 @@ const Navbar = () => {
           >
             🛍️ Productos
           </Link>
+          <Link
+            to="/inventary"
+            className={`navbar-link ${isActiveLink('/inventary') ? 'active' : ''}`}
+          >
+            📦 Inventario
+          </Link>
         </div>
       </div>
 
