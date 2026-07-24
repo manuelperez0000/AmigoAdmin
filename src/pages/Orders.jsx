@@ -1,12 +1,25 @@
 import { useState, useEffect } from 'react';
 import useDollarStore from '../stores/dollarStore';
 import * as XLSX from 'xlsx';
+import Modal from '../components/Modal';
+import ProductButton from '../components/ProductButton';
+import IconPicker from '../components/IconPicker';
 
 const Orders = () => {
   const { dolarPrice } = useDollarStore();
   const [orders, setOrders] = useState([]);
   const [filteredOrders, setFilteredOrders] = useState([]);
   const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0]);
+  const [editingOrderId, setEditingOrderId] = useState(null);
+  const [editItems, setEditItems] = useState([]);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [availableProducts, setAvailableProducts] = useState([]);
+  const [selectedProductToAdd, setSelectedProductToAdd] = useState(null);
+  const [selectedProductQty, setSelectedProductQty] = useState(1);
+  const [manualName, setManualName] = useState('');
+  const [manualPrice, setManualPrice] = useState(0);
+  const [manualIcon, setManualIcon] = useState('');
 
   useEffect(() => {
     const storedOrders = JSON.parse(localStorage.getItem('orders')) || [];
@@ -14,18 +27,137 @@ const Orders = () => {
     setFilteredOrders(storedOrders);
   }, []);
 
+  // Update filteredOrders when filterDate or orders change
   useEffect(() => {
-    let filtered = orders;
-
+    let filtered = orders.slice();
     if (filterDate) {
-      filtered = orders.filter(order => order.date.startsWith(filterDate));
+      filtered = filtered.filter(order => {
+        if (!order.date) return false;
+        const d = new Date(order.date);
+        if (isNaN(d)) return false;
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const orderDateStr = `${y}-${m}-${day}`;
+        return orderDateStr === filterDate;
+      });
     }
-
     // Ordenar pedidos desde la fecha más reciente a la más antigua
     filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
-
     setFilteredOrders(filtered);
   }, [filterDate, orders]);
+
+  const toggleAnulado = (orderId) => {
+    const updated = orders.map(o => {
+      if (o.id === orderId) {
+        return { ...o, anulado: !o.anulado };
+      }
+      return o;
+    });
+
+    setOrders(updated);
+    // Also update filteredOrders to reflect the change immediately
+    setFilteredOrders(prev => prev.map(p => (p.id === orderId ? { ...p, anulado: !p.anulado } : p)));
+    localStorage.setItem('orders', JSON.stringify(updated));
+  };
+
+  const handleSelectProduct = (product) => {
+    setSelectedProductToAdd(product);
+    setSelectedProductQty(1);
+  };
+
+  const confirmAddSelectedProduct = () => {
+    if (!selectedProductToAdd) return;
+    const newItem = {
+      id: selectedProductToAdd.id || `p-${Date.now()}`,
+      name: selectedProductToAdd.name,
+      price: Number(selectedProductToAdd.price) || 0,
+      quantity: Number(selectedProductQty) || 1,
+      icon: selectedProductToAdd.icon
+    };
+    setEditItems(prev => [...prev, newItem]);
+    setIsProductModalOpen(false);
+    setSelectedProductToAdd(null);
+    setSelectedProductQty(1);
+  };
+
+  const handleManualAdd = () => {
+    if (!manualName) return;
+    const newItem = {
+      id: `m-${Date.now()}`,
+      name: manualName,
+      price: Number(manualPrice) || 0,
+      quantity: Number(selectedProductQty) || 1,
+      icon: manualIcon
+    };
+    setEditItems(prev => [...prev, newItem]);
+    setIsProductModalOpen(false);
+    setManualName('');
+    setManualPrice(0);
+    setManualIcon('');
+    setSelectedProductQty(1);
+  };
+
+  const startEdit = (order) => {
+    setEditingOrderId(order.id);
+    // clone items to edit
+    setEditItems(order.items.map(it => ({ ...it })));
+    setIsEditModalOpen(true);
+  };
+
+  const cancelEdit = () => {
+    setEditingOrderId(null);
+    setEditItems([]);
+  };
+
+  const handleItemChange = (index, field, value) => {
+    setEditItems(prev => {
+      const copy = prev.map(it => ({ ...it }));
+      if (field === 'quantity') copy[index].quantity = parseInt(value || 0, 10);
+      else if (field === 'price') copy[index].price = parseFloat(value || 0);
+      else copy[index][field] = value;
+      return copy;
+    });
+  };
+
+  const addEmptyItem = () => {
+    // open product modal instead of free-form add
+    setSelectedProductToAdd(null);
+    setSelectedProductQty(1);
+    // load available products
+    const saved = localStorage.getItem('products');
+    setAvailableProducts(saved ? JSON.parse(saved) : []);
+    setIsProductModalOpen(true);
+  };
+
+  const removeEditItem = (index) => {
+    setEditItems(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const saveEdit = (order) => {
+    const dolarRate = order.dolarRate || dolarPrice || 1;
+    const sanitizedItems = editItems.map(it => ({
+      id: it.id || `itm-${Date.now()}-${Math.random()}`,
+      name: it.name || 'Sin nombre',
+      price: Number(it.price) || 0,
+      quantity: Number(it.quantity) || 0
+    }));
+
+    const newTotalBs = sanitizedItems.reduce((s, it) => s + (it.price * it.quantity * dolarRate), 0);
+    const updated = orders.map(o => {
+      if (o.id === order.id) {
+        return { ...o, items: sanitizedItems, total: newTotalBs };
+      }
+      return o;
+    });
+    setOrders(updated);
+    setFilteredOrders(prev => prev.map(p => (p.id === order.id ? { ...p, items: sanitizedItems, total: newTotalBs } : p)));
+    localStorage.setItem('orders', JSON.stringify(updated));
+    setIsEditModalOpen(false);
+    setEditingOrderId(null);
+    setEditItems([]);
+  };
+
 
   const exportToExcel = () => {
     if (filteredOrders.length === 0) {
@@ -173,7 +305,11 @@ const Orders = () => {
 
             <div className="orders-list">
               {filteredOrders.map((order, index) => (
-                <div key={index} className="order-card">
+                <div
+                  key={order.id || index}
+                  className={`order-card ${order.anulado ? 'order-anulado' : ''}`}
+                  style={{ background: order.anulado ? '#fff8c4' : 'transparent' }}
+                >
                   <div className="order-header">
                     <div className="order-info">
                       <h3 className="order-total">
@@ -185,11 +321,55 @@ const Orders = () => {
                       <p className="order-dolar-rate">
                         💱 Tasa del dólar: Bs. {order.dolarRate ? order.dolarRate.toFixed(2) : 'No disponible'}
                       </p>
+                      {order.anulado && (
+                        <span style={{
+                          display: 'inline-block',
+                          marginTop: 6,
+                          padding: '2px 6px',
+                          fontSize: 12,
+                          background: '#f9d976',
+                          color: '#333',
+                          borderRadius: 4
+                        }}>Anulado</span>
+                      )}
                     </div>
                     <div className="order-number">
                       <div className="order-sequence">Pedido #{order.id}</div>
                     </div>
+
+              
                   </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '0 12px 12px' }}>
+                    <button
+                      onClick={() => toggleAnulado(order.id)}
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: 6,
+                        border: '1px solid #ccc',
+                        background: order.anulado ? '#e6f7ff' : '#fff',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {order.anulado ? 'Reestablecer' : 'Anular'}
+                    </button>
+
+                    <button
+                      onClick={() => startEdit(order)}
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: 6,
+                        border: '1px solid #4a90e2',
+                        background: '#fff',
+                        color: '#0b5ed7',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Editar
+                    </button>
+                  </div>
+
+                  
 
 
                   <h4 className="items-title">Productos:</h4>
@@ -215,6 +395,89 @@ const Orders = () => {
 
               ))}
             </div>
+            {/* Edit order modal */}
+            <Modal isOpen={isEditModalOpen} onClose={() => { setIsEditModalOpen(false); cancelEdit(); }}>
+              <div style={{ minWidth: 500 }}>
+                <h3>Editar Pedido #{editingOrderId}</h3>
+                {(() => {
+                  const currentOrder = orders.find(o => o.id === editingOrderId);
+                  if (!currentOrder) return <div>No se encontró el pedido</div>;
+                  return (
+                    <div>
+                      <div style={{ marginTop: 8 }}>
+                        {editItems.map((it, i) => (
+                          <div key={it.id || i} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+                            <div style={{ fontSize: 20 }}>{it.icon || '📦'}</div>
+                            <div style={{ flex: 2 }}>
+                              <div style={{ fontWeight: 600 }}>{it.name}</div>
+                              <div style={{ fontSize: 12, color: '#666' }}>${Number(it.price).toFixed(2)}</div>
+                            </div>
+                            <input type="number" value={it.quantity} onChange={(e) => handleItemChange(i, 'quantity', e.target.value)} style={{ width: 90, padding: 6 }} />
+                            <button onClick={() => removeEditItem(i)} style={{ padding: '6px 8px' }}>Eliminar</button>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                        <button onClick={addEmptyItem} style={{ padding: '6px 10px' }}>Agregar producto</button>
+                        <div style={{ flex: 1 }} />
+                        <button onClick={() => saveEdit(currentOrder)} style={{ padding: '6px 10px', background: '#198754', color: '#fff', borderRadius: 6 }}>Guardar</button>
+                        <button onClick={() => { setIsEditModalOpen(false); cancelEdit(); }} style={{ padding: '6px 10px', borderRadius: 6 }}>Cancelar</button>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </Modal>
+
+            {/* Product selection modal */}
+            <Modal isOpen={isProductModalOpen} onClose={() => setIsProductModalOpen(false)}>
+              <div style={{ maxWidth: 700 }}>
+                <h3>Seleccionar producto</h3>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {availableProducts.length === 0 ? (
+                    <div style={{ width: '100%' }}>
+                      <div>No hay productos guardados. Agrega uno manualmente:</div>
+                      <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
+                        <input type="text" placeholder="Nombre" value={manualName} onChange={(e) => setManualName(e.target.value)} style={{ flex: 2, padding: 6 }} />
+                        <input type="number" placeholder="Precio USD" value={manualPrice} onChange={(e) => setManualPrice(e.target.value)} style={{ width: 140, padding: 6 }} />
+                        <input type="number" min={1} value={selectedProductQty} onChange={(e) => setSelectedProductQty(Number(e.target.value))} style={{ width: 90, padding: 6 }} />
+                      </div>
+                      <div style={{ marginTop: 8 }}>
+                        <IconPicker newItem={{ icon: manualIcon }} onSelectIcon={(icon) => setManualIcon(icon)} />
+                      </div>
+                      <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+                        <button onClick={handleManualAdd} style={{ padding: '6px 10px', background: '#0d6efd', color: '#fff', borderRadius: 6 }}>Agregar manual</button>
+                        <button onClick={() => setIsProductModalOpen(false)} style={{ padding: '6px 10px' }}>Cancelar</button>
+                      </div>
+                    </div>
+                  ) : (
+                    availableProducts.map(p => (
+                      <ProductButton key={p.id} product={p} onAddToCart={handleSelectProduct} />
+                    ))
+                  )}
+                </div>
+
+                {selectedProductToAdd && (
+                  <div style={{ marginTop: 12 }}>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <div style={{ fontSize: 24 }}>{selectedProductToAdd.icon}</div>
+                      <div>
+                        <div style={{ fontWeight: 600 }}>{selectedProductToAdd.name}</div>
+                        <div>${Number(selectedProductToAdd.price).toFixed(2)}</div>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <label>Cantidad:</label>
+                      <input type="number" min={1} value={selectedProductQty} onChange={(e) => setSelectedProductQty(Number(e.target.value))} style={{ width: 90, padding: 6 }} />
+                      <div style={{ flex: 1 }} />
+                      <button onClick={confirmAddSelectedProduct} style={{ padding: '6px 10px', background: '#0d6efd', color: '#fff', borderRadius: 6 }}>Agregar</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Modal>
           </div>
         )}
       </div>
