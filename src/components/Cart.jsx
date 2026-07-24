@@ -27,7 +27,6 @@ const Cart = ({ cartItems, onRemoveFromCart, onClearCart, onAddToCart, onRemoveQ
     localStorage.setItem('nextOrderId', JSON.stringify(currentOrderId + 1));
 
     onClearCart();
-    alert('Pedido completado!');
   };
 
   return (
