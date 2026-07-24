@@ -176,91 +176,137 @@ const Orders = () => {
       return;
     }
 
-    // Crear datos para el Excel (manteniendo números como números)
     const excelData = [];
 
-    // Agregar encabezado
-    excelData.push(['Fecha del Pedido', 'Producto', 'Cantidad', 'Precio Unitario ($)', 'Precio Unitario (Bs.)', 'Total Producto ($)', 'Total Producto (Bs.)']);
+    // Encabezado
+    excelData.push(['Fecha del Pedido', 'Cliente', 'Producto', 'Cantidad', 'Precio Unitario ($)', 'Precio Unitario (Bs.)', 'Total Producto ($)', 'Total Producto (Bs.)']);
 
-    // Agregar datos de cada pedido
+    let grandTotalUsd = 0;
+    let grandTotalBs = 0;
+
     filteredOrders.forEach((order, orderIndex) => {
-      // Usar la tasa guardada del pedido o la actual si no está disponible
       const orderDolarRate = order.dolarRate || dolarPrice;
 
       order.items.forEach((item) => {
+        const totalItemUsd = item.price * item.quantity;
+        const totalItemBs = totalItemUsd * orderDolarRate;
+        grandTotalUsd += totalItemUsd;
+        grandTotalBs += totalItemBs;
+
         excelData.push([
           new Date(order.date).toLocaleString(),
+          order.clientName || 'Sin nombre',
           item.name,
           item.quantity,
-          item.price, // Número sin formatear
-          item.price * orderDolarRate, // Número sin formatear
-          item.price * item.quantity, // Número sin formatear
-          item.price * item.quantity * orderDolarRate // Número sin formatear
+          item.price,
+          item.price * orderDolarRate,
+          totalItemUsd,
+          totalItemBs
         ]);
       });
 
-      // Agregar fila de total del pedido
       excelData.push([
-        `TOTAL PEDIDO ${orderIndex + 1}`,
+        `TOTAL PEDIDO #${order.id}`,
+        order.clientName || '',
         '',
         '',
         '',
         '',
-        order.total / orderDolarRate, // Número sin formatear
-        order.total // Número sin formatear
+        order.total / orderDolarRate,
+        order.total
       ]);
 
-      // Agregar fila con la tasa del dólar del pedido
       excelData.push([
         `TASA DEL DÓLAR: Bs. ${orderDolarRate}`,
-        '',
-        '',
-        '',
-        '',
-        '',
-        ''
+        '', '', '', '', '', '', ''
       ]);
 
-      // Agregar fila vacía para separar pedidos
-      excelData.push(['', '', '', '', '', '', '']);
+      excelData.push(['', '', '', '', '', '', '', '']);
     });
 
-    // Crear hoja de Excel
+    // Fila de gran total
+    excelData.push(['TOTAL GENERAL', '', '', '', '', '', grandTotalUsd, grandTotalBs]);
+
     const ws = XLSX.utils.aoa_to_sheet(excelData);
 
-    // Configurar formato de número para columnas numéricas (3-6 son precios y totales)
-    const numberColumns = [3, 4, 5, 6]; // Columnas D, E, F, G (índice basado en 0)
-    numberColumns.forEach(colIndex => {
-      const colLetter = String.fromCharCode(65 + colIndex); // Convertir índice a letra de columna
-      for (let row = 1; row <= excelData.length; row++) {
-        const cellRef = `${colLetter}${row}`;
-        if (ws[cellRef] && typeof ws[cellRef].v === 'number') {
-          ws[cellRef].t = 'n'; // Tipo número
-          ws[cellRef].z = '#,##0.00'; // Formato con coma como separador decimal
+    // Estilos
+    const darkBlue = { fgColor: { rgb: "1F3864" } };
+    const whiteFont = { color: { rgb: "FFFFFF" }, bold: true };
+    const thinBorder = {
+      top: { style: "thin" },
+      bottom: { style: "thin" },
+      left: { style: "thin" },
+      right: { style: "thin" }
+    };
+    const boldFont = { bold: true };
+
+    const totalRows = excelData.length;
+    const totalCols = 8;
+
+    for (let r = 0; r < totalRows; r++) {
+      for (let c = 0; c < totalCols; c++) {
+        const cellRef = XLSX.utils.encode_cell({ r, c });
+        if (!ws[cellRef]) {
+          ws[cellRef] = { v: '' };
+        }
+        ws[cellRef].s = { border: thinBorder };
+      }
+    }
+
+    // Estilo fila encabezado (fila 0)
+    for (let c = 0; c < totalCols; c++) {
+      const cellRef = XLSX.utils.encode_cell({ r: 0, c });
+      ws[cellRef].s = { fill: darkBlue, font: whiteFont, border: thinBorder };
+    }
+
+    // Estilo filas de total por pedido
+    excelData.forEach((row, idx) => {
+      if (idx === 0) return;
+      const cellVal = row[0];
+      if (typeof cellVal === 'string' && cellVal.startsWith('TOTAL PEDIDO')) {
+        for (let c = 0; c < totalCols; c++) {
+          const cellRef = XLSX.utils.encode_cell({ r: idx, c });
+          if (!ws[cellRef]) ws[cellRef] = { v: '' };
+          ws[cellRef].s = { font: boldFont, border: thinBorder };
         }
       }
     });
 
-    // Configurar anchos de columna
-    const colWidths = [
-      { wch: 20 }, // Fecha
+    // Estilo fila gran total (última fila)
+    const lastRowIdx = totalRows - 1;
+    for (let c = 0; c < totalCols; c++) {
+      const cellRef = XLSX.utils.encode_cell({ r: lastRowIdx, c });
+      if (!ws[cellRef]) ws[cellRef] = { v: '' };
+      ws[cellRef].s = { fill: darkBlue, font: { ...whiteFont, bold: true }, border: thinBorder };
+    }
+
+    // Formato numérico
+    const numberColumns = [4, 5, 6, 7];
+    numberColumns.forEach(colIndex => {
+      const colLetter = String.fromCharCode(65 + colIndex);
+      for (let row = 1; row <= totalRows; row++) {
+        const cellRef = `${colLetter}${row}`;
+        if (ws[cellRef] && typeof ws[cellRef].v === 'number') {
+          ws[cellRef].t = 'n';
+          ws[cellRef].z = '#,##0.00';
+        }
+      }
+    });
+
+    ws['!cols'] = [
+      { wch: 22 }, // Fecha
+      { wch: 20 }, // Cliente
       { wch: 25 }, // Producto
       { wch: 10 }, // Cantidad
-      { wch: 15 }, // Precio Unitario ($)
-      { wch: 15 }, // Precio Unitario (Bs.)
-      { wch: 15 }, // Total Producto ($)
-      { wch: 15 }  // Total Producto (Bs.)
+      { wch: 18 }, // Precio Unitario ($)
+      { wch: 18 }, // Precio Unitario (Bs.)
+      { wch: 18 }, // Total Producto ($)
+      { wch: 18 }  // Total Producto (Bs.)
     ];
-    ws['!cols'] = colWidths;
 
-    // Crear libro de Excel
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, `Pedidos_${filterDate}`);
-
-    // Generar nombre del archivo
     const fileName = `pedidos_${filterDate || 'todos'}.xlsx`;
-
-    // Descargar archivo
     XLSX.writeFile(wb, fileName);
   };
 
