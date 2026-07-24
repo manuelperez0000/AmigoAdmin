@@ -1,13 +1,22 @@
+import { useState } from 'react';
 import PropTypes from 'prop-types';
 import useDollarStore from '../stores/dollarStore';
+import Modal from './Modal';
 
 const Cart = ({ cartItems, onRemoveFromCart, onClearCart, onAddToCart, onRemoveQuantity, setCartItems }) => {
   const { dolarPrice } = useDollarStore();
   const total = cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
   const totalBs = total * dolarPrice;
 
+  const [isNameModalOpen, setIsNameModalOpen] = useState(false);
+  const [clientName, setClientName] = useState('');
+
   const handleCompleteOrder = () => {
-    // Obtener el siguiente ID del localStorage
+    setClientName('');
+    setIsNameModalOpen(true);
+  };
+
+  const confirmCompleteOrder = () => {
     const nextOrderId = JSON.parse(localStorage.getItem('nextOrderId')) || 1;
     const currentOrderId = nextOrderId;
 
@@ -16,16 +25,16 @@ const Cart = ({ cartItems, onRemoveFromCart, onClearCart, onAddToCart, onRemoveQ
       items: cartItems,
       total: totalBs,
       date: new Date().toISOString(),
-      dolarRate: dolarPrice, // Guarda la tasa del dólar en el momento del pedido
+      dolarRate: dolarPrice,
+      clientName: clientName.trim() || 'Sin nombre',
     };
 
-    // Guardar el pedido
     const existingOrders = JSON.parse(localStorage.getItem('orders')) || [];
     localStorage.setItem('orders', JSON.stringify([...existingOrders, order]));
-
-    // Incrementar el contador para el siguiente pedido
     localStorage.setItem('nextOrderId', JSON.stringify(currentOrderId + 1));
 
+    setIsNameModalOpen(false);
+    setClientName('');
     onClearCart();
   };
 
@@ -89,6 +98,29 @@ const Cart = ({ cartItems, onRemoveFromCart, onClearCart, onAddToCart, onRemoveQ
       {cartItems.length > 0 && (
         <button className='btn btn-success mt-4 w-100' onClick={handleCompleteOrder}>Completar Pedido</button>
       )}
+
+      <Modal isOpen={isNameModalOpen} onClose={() => setIsNameModalOpen(false)} fullScreen>
+        <div style={{ textAlign: 'center' }}>
+          <h3 style={{ marginBottom: 16 }}>Nombre del cliente</h3>
+          <input
+            type="text"
+            placeholder="A nombre de..."
+            value={clientName}
+            onChange={(e) => setClientName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') confirmCompleteOrder(); }}
+            autoFocus
+            style={{ width: '100%', maxWidth: 400, padding: '10px 14px', marginTop: 8, borderRadius: 6, border: '1px solid #ccc', fontSize: 18, textAlign: 'center' }}
+          />
+          <div style={{ display: 'flex', gap: 12, marginTop: 24, justifyContent: 'center' }}>
+            <button onClick={() => setIsNameModalOpen(false)} style={{ padding: '10px 20px', borderRadius: 6, border: '1px solid #ccc', background: '#fff', cursor: 'pointer', fontSize: 16 }}>
+              Cancelar
+            </button>
+            <button onClick={confirmCompleteOrder} style={{ padding: '10px 20px', borderRadius: 6, background: '#198754', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 16 }}>
+              Confirmar
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

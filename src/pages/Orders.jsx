@@ -20,6 +20,7 @@ const Orders = () => {
   const [manualName, setManualName] = useState('');
   const [manualPrice, setManualPrice] = useState(0);
   const [manualIcon, setManualIcon] = useState('');
+  const [editClientName, setEditClientName] = useState('');
 
   useEffect(() => {
     const storedOrders = JSON.parse(localStorage.getItem('orders')) || [];
@@ -108,14 +109,15 @@ const Orders = () => {
 
   const startEdit = (order) => {
     setEditingOrderId(order.id);
-    // clone items to edit
     setEditItems(order.items.map(it => ({ ...it })));
+    setEditClientName(order.clientName || '');
     setIsEditModalOpen(true);
   };
 
   const cancelEdit = () => {
     setEditingOrderId(null);
     setEditItems([]);
+    setEditClientName('');
   };
 
   const handleItemChange = (index, field, value) => {
@@ -154,7 +156,7 @@ const Orders = () => {
     const newTotalBs = sanitizedItems.reduce((s, it) => s + (it.price * it.quantity * dolarRate), 0);
     const updated = orders.map(o => {
       if (o.id === order.id) {
-        return { ...o, items: sanitizedItems, total: newTotalBs };
+        return { ...o, items: sanitizedItems, total: newTotalBs, clientName: editClientName.trim() || o.clientName || 'Sin nombre' };
       }
       return o;
     });
@@ -164,6 +166,7 @@ const Orders = () => {
     setIsEditModalOpen(false);
     setEditingOrderId(null);
     setEditItems([]);
+    setEditClientName('');
   };
 
 
@@ -343,6 +346,9 @@ const Orders = () => {
                     </div>
                     <div className="order-number">
                       <div className="order-sequence">Pedido #{order.id}</div>
+                      {order.clientName && (
+                        <div style={{ fontSize: 14, color: '#fff', marginTop: 4 }}>👤 {order.clientName}</div>
+                      )}
                     </div>
 
               
@@ -433,6 +439,16 @@ const Orders = () => {
                   if (!currentOrder) return <div>No se encontró el pedido</div>;
                   return (
                     <div>
+                      <div style={{ marginTop: 8, marginBottom: 12 }}>
+                        <label style={{ fontWeight: 600, display: 'block', marginBottom: 4 }}>Nombre del cliente:</label>
+                        <input
+                          type="text"
+                          value={editClientName}
+                          onChange={(e) => setEditClientName(e.target.value)}
+                          placeholder="A nombre de..."
+                          style={{ width: '100%', padding: '6px 10px', borderRadius: 6, border: '1px solid #ccc' }}
+                        />
+                      </div>
                       <div style={{ marginTop: 8 }}>
                         {editItems.map((it, i) => (
                           <div key={it.id || i} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
